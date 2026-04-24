@@ -3,6 +3,7 @@
 let wbNavHistory = [];
 let wbCurrentCategory = null;
 let wbCurrentEntry = null;
+let wbListenersBound = false;
 
 // DOM Elements cache
 let wbElements = {};
@@ -480,6 +481,8 @@ function closeWbModal() {
 // ---------------------------------------------------------
 
 function setupWorldbookListeners() {
+    if (wbListenersBound) return;
+    wbListenersBound = true;
     initWbElements();
     
     // Re-bind listeners

@@ -1,6 +1,9 @@
 // Settings App V3 Logic
 
 function initSettingsApp() {
+    if (window.__settingsV3InitDone) return;
+    window.__settingsV3InitDone = true;
+
     // Initial tab
     switchSettingsTab('ai');
     
