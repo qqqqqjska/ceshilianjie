@@ -2295,6 +2295,23 @@
 
         hydrateAlbumState();
         app.dataset.albumReady = '1';
+
+        if (app.dataset.albumVisibilityBound !== '1') {
+            app.dataset.albumVisibilityBound = '1';
+            const observer = new MutationObserver((mutations) => {
+                const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+                if (!classChanged || !app.classList.contains('hidden')) return;
+                closeCreateAlbumModal();
+                closeMoveModal();
+                closeAlbumPrivacyActionModal();
+                closeAlbumPrivacyPasswordModal();
+                clearAlbumCardLongPress();
+                closePhotoDetail();
+                closeAlbumDetail();
+            });
+            observer.observe(app, { attributes: true, attributeFilter: ['class'] });
+        }
+
         bindAlbumEvents();
         renderAlbumAppUi();
     }
