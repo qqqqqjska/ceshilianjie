@@ -5019,13 +5019,13 @@ function getDefaultMemorySettingsRuntime() {
         dedupeThreshold: 0.75,
         vectorRetrieval: {
             enabled: false,
-            endpoint: '',
-            apiKey: '',
-            model: 'text-embedding-3-small',
+            endpoint: 'https://api.siliconflow.cn/v1',
+            apiKey: 'sk-tpkfgtmytrfvabkejzzyccvfeqkgwvnqxobpendlnmokojik',
+            model: 'BAAI/bge-m3',
             topK: 8,
             minSimilarity: 0.35,
             queryTimeoutMs: 600,
-            useChatKeyFallback: true
+            useChatKeyFallback: false
         },
         stateExtractV2: {
             enabled: true,
@@ -5098,14 +5098,12 @@ function ensureMemorySettingsV2() {
                 ? !!defaults.vectorRetrieval.enabled
                 : !!vectorRetrieval.enabled,
             endpoint: String(vectorRetrieval.endpoint || defaults.vectorRetrieval.endpoint || '').trim(),
-            apiKey: String(vectorRetrieval.apiKey || '').trim(),
+            apiKey: String(vectorRetrieval.apiKey || defaults.vectorRetrieval.apiKey || '').trim(),
             model: String(vectorRetrieval.model || defaults.vectorRetrieval.model || '').trim(),
             topK: clampInt(vectorRetrieval.topK, defaults.vectorRetrieval.topK, 1, 30),
             minSimilarity: clampFloat(vectorRetrieval.minSimilarity, defaults.vectorRetrieval.minSimilarity, 0.05, 0.99),
             queryTimeoutMs: clampInt(vectorRetrieval.queryTimeoutMs, defaults.vectorRetrieval.queryTimeoutMs, 200, 5000),
-            useChatKeyFallback: vectorRetrieval.useChatKeyFallback === undefined
-                ? !!defaults.vectorRetrieval.useChatKeyFallback
-                : !!vectorRetrieval.useChatKeyFallback
+            useChatKeyFallback: false
         },
         stateExtractV2: {
             enabled: stateExtract.enabled === undefined ? true : !!stateExtract.enabled,
@@ -6335,6 +6333,11 @@ const MEMORY_VECTOR_INDEX_STORAGE_PREFIX = 'memory-vector-index-v1:';
 const MEMORY_VECTOR_INDEX_MAX_ITEMS = 4000;
 const MEMORY_VECTOR_BUILD_BATCH_SIZE = 6;
 const MEMORY_VECTOR_BACKGROUND_MAX_ITEMS = 12;
+const BUILTIN_MEMORY_VECTOR_EMBEDDING = Object.freeze({
+    endpoint: 'https://api.siliconflow.cn/v1',
+    apiKey: 'sk-tpkfgtmytrfvabkejzzyccvfeqkgwvnqxobpendlnmokojik',
+    model: 'BAAI/bge-m3'
+});
 const memoryVectorIndexCache = new Map();
 const memoryVectorBuildQueue = [];
 const memoryVectorBuildQueueSet = new Set();
@@ -6347,13 +6350,13 @@ function getMemoryVectorSettings() {
         : {};
     return {
         enabled: !!vector.enabled,
-        endpoint: String(vector.endpoint || '').trim(),
-        apiKey: String(vector.apiKey || '').trim(),
-        model: String(vector.model || 'text-embedding-3-small').trim() || 'text-embedding-3-small',
+        endpoint: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.endpoint || '').trim(),
+        apiKey: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.apiKey || '').trim(),
+        model: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.model || 'BAAI/bge-m3').trim() || 'BAAI/bge-m3',
         topK: clampInt(vector.topK, 8, 1, 30),
         minSimilarity: clampFloat(vector.minSimilarity, 0.35, 0.05, 0.99),
         queryTimeoutMs: clampInt(vector.queryTimeoutMs, 600, 200, 5000),
-        useChatKeyFallback: vector.useChatKeyFallback !== false
+        useChatKeyFallback: false
     };
 }
 
@@ -6491,15 +6494,9 @@ function buildEmbeddingApiUrl(endpoint) {
 }
 
 function resolveMemoryVectorEmbeddingConfig(vectorSettings) {
-    const aiSettings = getPreferredChatAiSettings();
-    const vectorEndpoint = String(vectorSettings && vectorSettings.endpoint || '').trim();
-    const chatEndpoint = String(aiSettings && aiSettings.url || '').trim();
-    const endpoint = buildEmbeddingApiUrl(vectorEndpoint || chatEndpoint);
-    const model = String(vectorSettings && vectorSettings.model || 'text-embedding-3-small').trim() || 'text-embedding-3-small';
-    let apiKey = String(vectorSettings && vectorSettings.apiKey || '').replace(/[^\x00-\x7F]/g, '').trim();
-    if (!apiKey && vectorSettings && vectorSettings.useChatKeyFallback) {
-        apiKey = String(aiSettings && aiSettings.key || '').replace(/[^\x00-\x7F]/g, '').trim();
-    }
+    const endpoint = buildEmbeddingApiUrl(BUILTIN_MEMORY_VECTOR_EMBEDDING.endpoint);
+    const model = String(BUILTIN_MEMORY_VECTOR_EMBEDDING.model || '').trim();
+    const apiKey = String(BUILTIN_MEMORY_VECTOR_EMBEDDING.apiKey || '').replace(/[^\x00-\x7F]/g, '').trim();
     return {
         endpoint,
         model,
@@ -6534,7 +6531,7 @@ function explainMemoryVectorError(error, resolvedEndpoint = '') {
         const missing = rawMessage.split(':')[1] || '';
         const missingText = missing ? `缺少字段：${missing}` : '缺少必要字段。';
         detail.summary = `Embedding 配置校验未通过。${missingText}`;
-        detail.hint = '请补全地址/API Key/模型，或开启“Key 为空时回退聊天 Key”。';
+        detail.hint = '当前版本使用内置 Embedding 配置。若仍出现该错误，请复制日志联系开发者检查构建版本。';
         return detail;
     }
     const httpMatch = normalized.match(/embedding_http_(\d+)/);
@@ -6561,7 +6558,15 @@ function explainMemoryVectorError(error, resolvedEndpoint = '') {
         detail.hint = '请检查网络质量，或稍后重试。';
         return detail;
     }
-    if (rawName === 'TypeError' && normalized.includes('failed to fetch')) {
+    if (
+        rawName === 'TypeError'
+        && (
+            normalized.includes('failed to fetch')
+            || normalized.includes('load failed')
+            || normalized.includes('networkerror')
+            || normalized.includes('network error')
+        )
+    ) {
         detail.stage = 'network_or_cors';
         if (isCrossOriginEndpoint(resolvedEndpoint)) {
             detail.title = '跨域/CORS 或网络拦截';
@@ -6603,10 +6608,12 @@ function buildMemoryVectorRebuildLog(payload = {}) {
     lines.push(`vector_model: ${String(vectorSettings.model || '')}`);
     lines.push(`resolved_embedding_model: ${String(resolvedConfig.model || '')}`);
     lines.push(`vector_api_key_configured: ${String(vectorSettings.apiKey || '').trim() ? 'yes' : 'no'}`);
+    lines.push(`resolved_embedding_api_key_available: ${String(resolvedConfig.apiKey || '').trim() ? 'yes' : 'no'}`);
     lines.push(`use_chat_key_fallback: ${vectorSettings.useChatKeyFallback !== false ? 'yes' : 'no'}`);
     lines.push(`top_k: ${Number(vectorSettings.topK || 0)}`);
     lines.push(`min_similarity: ${Number(vectorSettings.minSimilarity || 0)}`);
     lines.push(`query_timeout_ms: ${Number(vectorSettings.queryTimeoutMs || 0)}`);
+    lines.push(`local_memory_count: ${Number(payload.localMemoryCount || 0)}`);
     lines.push(`indexed_count: ${Number(result.indexedCount || 0)}`);
     lines.push(`total_memories: ${Number(result.totalMemories || 0)}`);
     lines.push(`built_count: ${Number(result.builtCount || 0)}`);
@@ -6762,6 +6769,27 @@ async function syncMemoryVectorIndexForContact(contactId, options = {}) {
     if (!cid) {
         return { ok: false, skipped: true, reason: 'missing_contact_id', builtCount: 0, pendingCount: 0 };
     }
+    const memories = getContactMemories(cid).filter(memory => memory && normalizeMemoryVectorText(memory.content));
+    const previousIndex = await loadMemoryVectorIndex(cid);
+    const now = Date.now();
+    if (!memories.length) {
+        await saveMemoryVectorIndex(cid, {
+            version: 1,
+            contactId: cid,
+            modelFingerprint: String(previousIndex && previousIndex.modelFingerprint || ''),
+            updatedAt: now,
+            items: []
+        });
+        return {
+            ok: true,
+            skipped: false,
+            reason: 'no_memories',
+            builtCount: 0,
+            pendingCount: 0,
+            indexedCount: 0,
+            totalMemories: 0
+        };
+    }
     const vectorSettings = getMemoryVectorSettings();
     if (!vectorSettings.enabled && !options.force) {
         return { ok: false, skipped: true, reason: 'vector_disabled', builtCount: 0, pendingCount: 0 };
@@ -6780,10 +6808,6 @@ async function syncMemoryVectorIndexForContact(contactId, options = {}) {
             pendingCount: 0
         };
     }
-
-    const memories = getContactMemories(cid).filter(memory => memory && normalizeMemoryVectorText(memory.content));
-    const previousIndex = await loadMemoryVectorIndex(cid);
-    const now = Date.now();
     const forceRebuild = !!options.forceRebuild || String(previousIndex.modelFingerprint || '') !== config.fingerprint;
     const previousByMemoryId = forceRebuild
         ? new Map()
@@ -7985,18 +8009,10 @@ function openMemorySettings() {
     const vectorSettings = settings.vectorRetrieval || {};
     const vectorEnabledEl = document.getElementById('modal-memory-vector-enabled');
     if (vectorEnabledEl) vectorEnabledEl.checked = !!vectorSettings.enabled;
-    const vectorEndpointEl = document.getElementById('modal-memory-vector-endpoint');
-    if (vectorEndpointEl) vectorEndpointEl.value = String(vectorSettings.endpoint || '');
-    const vectorApiKeyEl = document.getElementById('modal-memory-vector-api-key');
-    if (vectorApiKeyEl) vectorApiKeyEl.value = String(vectorSettings.apiKey || '');
-    const vectorModelEl = document.getElementById('modal-memory-vector-model');
-    if (vectorModelEl) vectorModelEl.value = String(vectorSettings.model || '');
     const vectorTopKEl = document.getElementById('modal-memory-vector-topk');
     if (vectorTopKEl) vectorTopKEl.value = String(clampInt(vectorSettings.topK, 8, 1, 30));
     const vectorMinSimilarityEl = document.getElementById('modal-memory-vector-min-similarity');
     if (vectorMinSimilarityEl) vectorMinSimilarityEl.value = clampFloat(vectorSettings.minSimilarity, 0.35, 0.05, 0.99).toFixed(2);
-    const vectorFallbackKeyEl = document.getElementById('modal-memory-vector-fallback-chat-key');
-    if (vectorFallbackKeyEl) vectorFallbackKeyEl.checked = vectorSettings.useChatKeyFallback !== false;
     document.getElementById('memory-settings-modal').classList.remove('hidden');
 }
 
@@ -8040,23 +8056,19 @@ function handleSaveMemorySettings() {
         ? settings.vectorRetrieval
         : {};
     const vectorEnabledEl = document.getElementById('modal-memory-vector-enabled');
-    const vectorEndpointEl = document.getElementById('modal-memory-vector-endpoint');
-    const vectorApiKeyEl = document.getElementById('modal-memory-vector-api-key');
-    const vectorModelEl = document.getElementById('modal-memory-vector-model');
     const vectorTopKEl = document.getElementById('modal-memory-vector-topk');
     const vectorMinSimilarityEl = document.getElementById('modal-memory-vector-min-similarity');
-    const vectorFallbackKeyEl = document.getElementById('modal-memory-vector-fallback-chat-key');
     settings.vectorRetrieval = {
         enabled: vectorEnabledEl ? !!vectorEnabledEl.checked : !!currentVector.enabled,
-        endpoint: vectorEndpointEl ? String(vectorEndpointEl.value || '').trim() : String(currentVector.endpoint || ''),
-        apiKey: vectorApiKeyEl ? String(vectorApiKeyEl.value || '').trim() : String(currentVector.apiKey || ''),
-        model: vectorModelEl ? String(vectorModelEl.value || '').trim() : String(currentVector.model || 'text-embedding-3-small'),
+        endpoint: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.endpoint || '').trim(),
+        apiKey: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.apiKey || '').trim(),
+        model: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.model || 'BAAI/bge-m3').trim(),
         topK: vectorTopKEl ? clampInt(vectorTopKEl.value, clampInt(currentVector.topK, 8, 1, 30), 1, 30) : clampInt(currentVector.topK, 8, 1, 30),
         minSimilarity: vectorMinSimilarityEl
             ? clampFloat(vectorMinSimilarityEl.value, clampFloat(currentVector.minSimilarity, 0.35, 0.05, 0.99), 0.05, 0.99)
             : clampFloat(currentVector.minSimilarity, 0.35, 0.05, 0.99),
         queryTimeoutMs: clampInt(currentVector.queryTimeoutMs, 600, 200, 5000),
-        useChatKeyFallback: vectorFallbackKeyEl ? !!vectorFallbackKeyEl.checked : currentVector.useChatKeyFallback !== false
+        useChatKeyFallback: false
     };
     window.iphoneSimState.memorySettingsV2 = settings;
     
@@ -10833,6 +10845,22 @@ function setupAppsListeners() {
             const contact = Array.isArray(window.iphoneSimState && window.iphoneSimState.contacts)
                 ? window.iphoneSimState.contacts.find(item => String(item && item.id) === String(contactId))
                 : null;
+            const localMemoryCount = getContactMemories(contactId).filter(memory => normalizeMemoryVectorText(memory && memory.content)).length;
+            if (localMemoryCount <= 0) {
+                const vectorSettings = getMemoryVectorSettings();
+                const resolvedConfig = resolveMemoryVectorEmbeddingConfig(vectorSettings);
+                window.__memoryVectorLastRebuildLog = buildMemoryVectorRebuildLog({
+                    status: 'skipped_no_memories',
+                    contactId: String(contactId || ''),
+                    contactName: contact ? (contact.remark || contact.nickname || contact.name || '') : '',
+                    vectorSettings,
+                    resolvedConfig,
+                    localMemoryCount,
+                    result: { indexedCount: 0, totalMemories: 0, builtCount: 0, pendingCount: 0 }
+                });
+                showNotification('当前联系人没有可向量化的记忆条目', 2400);
+                return;
+            }
             const originalText = memoryVectorRebuildBtn.textContent;
             memoryVectorRebuildBtn.disabled = true;
             memoryVectorRebuildBtn.textContent = '重建中...';
@@ -10848,6 +10876,7 @@ function setupAppsListeners() {
                         contactName: contact ? (contact.remark || contact.nickname || contact.name || '') : '',
                         vectorSettings: getMemoryVectorSettings(),
                         resolvedConfig: resolveMemoryVectorEmbeddingConfig(getMemoryVectorSettings()),
+                        localMemoryCount,
                         result
                     });
                     if (total <= 0) {
@@ -10874,7 +10903,8 @@ function setupAppsListeners() {
                     contactName: contact ? (contact.remark || contact.nickname || contact.name || '') : '',
                     vectorSettings,
                     resolvedConfig,
-                    result: {},
+                    localMemoryCount,
+                    result: { totalMemories: localMemoryCount, indexedCount: 0, builtCount: 0, pendingCount: 0 },
                     failure,
                     error
                 });
@@ -10882,15 +10912,15 @@ function setupAppsListeners() {
                 openMemoryVectorErrorModal(summaryText, logText);
                 const message = String(error && error.message || '');
                 if (message.startsWith('embedding_config_incomplete')) {
-                    showNotification('配置不完整：请填写 Embedding 地址，或先配置聊天 API 的 URL/Key', 2600);
+                    showNotification('内置 Embedding 配置不可用，请复制日志给开发者排查', 2800);
                 } else if (message.includes('embedding_http_401')) {
-                    showNotification('Embedding Key 无效（401）', 2200);
+                    showNotification('Embedding 授权失败（401）', 2200);
                 } else if (message.includes('embedding_http_404')) {
-                    showNotification('Embedding 地址无效（404），请检查是否为基础地址', 2600);
+                    showNotification('Embedding 服务地址不可用（404）', 2200);
                 } else if (message.includes('embedding_timeout')) {
                     showNotification('Embedding 请求超时，请稍后重试', 2200);
                 } else {
-                    showNotification('重建失败，请检查配置', 1800);
+                    showNotification('重建失败，请复制诊断日志排查', 2200);
                 }
             } finally {
                 memoryVectorRebuildBtn.disabled = false;

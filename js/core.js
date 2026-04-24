@@ -30,13 +30,13 @@ function createDefaultMemorySettingsV2() {
         dedupeThreshold: 0.75,
         vectorRetrieval: {
             enabled: false,
-            endpoint: '',
-            apiKey: '',
-            model: 'text-embedding-3-small',
+            endpoint: 'https://api.siliconflow.cn/v1',
+            apiKey: 'sk-tpkfgtmytrfvabkejzzyccvfeqkgwvnqxobpendlnmokojik',
+            model: 'BAAI/bge-m3',
             topK: 8,
             minSimilarity: 0.35,
             queryTimeoutMs: 600,
-            useChatKeyFallback: true
+            useChatKeyFallback: false
         },
         stateExtractV2: {
             enabled: true,
@@ -117,14 +117,12 @@ function normalizeMemorySettingsV2(raw) {
                 ? !!defaults.vectorRetrieval.enabled
                 : !!vectorRetrieval.enabled,
             endpoint: String(vectorRetrieval.endpoint || defaults.vectorRetrieval.endpoint || '').trim(),
-            apiKey: String(vectorRetrieval.apiKey || '').trim(),
+            apiKey: String(vectorRetrieval.apiKey || defaults.vectorRetrieval.apiKey || '').trim(),
             model: String(vectorRetrieval.model || defaults.vectorRetrieval.model || '').trim(),
             topK: toInt(vectorRetrieval.topK, defaults.vectorRetrieval.topK, 1, 30),
             minSimilarity: toFloat(vectorRetrieval.minSimilarity, defaults.vectorRetrieval.minSimilarity, 0.05, 0.99),
             queryTimeoutMs: toInt(vectorRetrieval.queryTimeoutMs, defaults.vectorRetrieval.queryTimeoutMs, 200, 5000),
-            useChatKeyFallback: vectorRetrieval.useChatKeyFallback === undefined
-                ? !!defaults.vectorRetrieval.useChatKeyFallback
-                : !!vectorRetrieval.useChatKeyFallback
+            useChatKeyFallback: false
         },
         stateExtractV2: {
             enabled: stateExtract.enabled === undefined ? true : !!stateExtract.enabled,
