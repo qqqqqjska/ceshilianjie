@@ -823,6 +823,63 @@ let dragThrottleTimer = null;
 let isDropped = false;
 let pageSwitchTimer = null;
 
+function forceResetHomeInteractionState(options = {}) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+
+    if (dragThrottleTimer) {
+        clearTimeout(dragThrottleTimer);
+        dragThrottleTimer = null;
+    }
+    if (pageSwitchTimer) {
+        clearTimeout(pageSwitchTimer);
+        pageSwitchTimer = null;
+    }
+
+    document.querySelectorAll('.touch-drag-clone').forEach((clone) => {
+        if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+    });
+    touchDragClone = null;
+    touchDraggedItem = null;
+    touchDraggedElement = null;
+    isTouchDragging = false;
+    touchStartPos = { x: 0, y: 0 };
+    touchCurrentPos = { x: 0, y: 0 };
+
+    currentDraggedItem = null;
+    lastDragTargetIndex = -1;
+    isDropped = false;
+
+    homeScreenData.forEach((item) => {
+        if (item && item._originalIndex !== undefined) delete item._originalIndex;
+    });
+
+    document.querySelectorAll('.draggable-item, .custom-widget, #music-widget, #polaroid-widget').forEach((el) => {
+        if (!el || !el.style) return;
+        el.style.opacity = '';
+        el.style.visibility = '';
+        el.style.transform = '';
+        el.style.transition = '';
+    });
+
+    document.querySelectorAll('.grid-slot').forEach((slot) => {
+        if (!slot || !slot.style) return;
+        slot.style.backgroundColor = '';
+        slot.style.transition = '';
+        slot.classList.remove('drag-preview');
+    });
+
+    if (options.forceExitEditMode && isEditMode) {
+        isEditMode = false;
+        const toolbar = document.getElementById('edit-mode-toolbar');
+        if (toolbar) toolbar.classList.add('hidden');
+    }
+
+    if (options.forceRender && typeof renderItems === 'function') {
+        renderItems();
+    }
+}
+
 function getOccupiedSlots(startIndex, size) {
     const indices = [];
     const pageIndex = Math.floor(startIndex / SLOTS_PER_PAGE);
@@ -1566,6 +1623,7 @@ if (window.appInitFunctions) {
 
 window.initGrid = initGrid;
 window.renderItems = renderItems;
+window.forceResetHomeInteractionState = forceResetHomeInteractionState;
 window.createCustomJsonWidget = createCustomJsonWidget;
 window.createAppElement = createAppElement;
 window.getOccupiedSlots = getOccupiedSlots;

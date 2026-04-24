@@ -1924,6 +1924,100 @@ function handleAppClick(appId, appName) {
         alert((appName || 'App') + ' is under development...');
     }
 }
+
+let appScreenRecoveryTimer = null;
+let appScreenRegistryObserver = null;
+
+function isAnyAppScreenVisible() {
+    return Array.from(document.querySelectorAll('.app-screen'))
+        .some((screen) => !screen.classList.contains('hidden'));
+}
+
+function dispatchSyntheticPointerRelease() {
+    const dispatch = (target, eventName, EventCtor) => {
+        try {
+            target.dispatchEvent(new EventCtor(eventName, { bubbles: true, cancelable: true }));
+        } catch (err) {
+            // no-op
+        }
+    };
+
+    dispatch(window, 'mouseup', MouseEvent);
+    dispatch(document, 'mouseup', MouseEvent);
+    dispatch(window, 'touchend', Event);
+    dispatch(document, 'touchend', Event);
+    dispatch(window, 'touchcancel', Event);
+    dispatch(document, 'touchcancel', Event);
+}
+
+function recoverHomeInteractionState(reason = 'unknown') {
+    dispatchSyntheticPointerRelease();
+    if (isAnyAppScreenVisible()) return;
+
+    if (typeof window.forceResetHomeInteractionState === 'function') {
+        window.forceResetHomeInteractionState({
+            forceRender: true,
+            reason
+        });
+        return;
+    }
+
+    if (typeof window.renderItems === 'function') {
+        window.renderItems();
+    }
+}
+
+function scheduleHomeInteractionRecovery(reason = 'unknown') {
+    if (appScreenRecoveryTimer) clearTimeout(appScreenRecoveryTimer);
+    appScreenRecoveryTimer = setTimeout(() => {
+        appScreenRecoveryTimer = null;
+        recoverHomeInteractionState(reason);
+    }, 90);
+}
+
+function observeAppScreenVisibility(screen) {
+    if (!screen || screen.dataset.appScreenRecoveryObserved === '1') return;
+    screen.dataset.appScreenRecoveryObserved = '1';
+
+    const observer = new MutationObserver((mutations) => {
+        const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+        if (!classChanged) return;
+        scheduleHomeInteractionRecovery(`app-screen:${screen.id || 'unknown'}`);
+    });
+
+    observer.observe(screen, { attributes: true, attributeFilter: ['class'] });
+}
+
+function setupAppScreenRecoveryObserver() {
+    if (window.__appScreenRecoveryObserverReady) return;
+    window.__appScreenRecoveryObserverReady = true;
+
+    document.querySelectorAll('.app-screen').forEach(observeAppScreenVisibility);
+
+    appScreenRegistryObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (!(node instanceof HTMLElement)) return;
+                if (node.classList && node.classList.contains('app-screen')) {
+                    observeAppScreenVisibility(node);
+                }
+                node.querySelectorAll?.('.app-screen').forEach(observeAppScreenVisibility);
+            });
+        });
+    });
+
+    if (document.body) {
+        appScreenRegistryObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    window.addEventListener('pageshow', () => scheduleHomeInteractionRecovery('pageshow'));
+    window.addEventListener('focus', () => scheduleHomeInteractionRecovery('focus'));
+    window.addEventListener('online', () => scheduleHomeInteractionRecovery('online'));
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) scheduleHomeInteractionRecovery('visibilitychange');
+    });
+}
+
 function showChatToast(message, duration = 2000) {
     const toast = document.getElementById('chat-toast');
     const text = document.getElementById('chat-toast-text');
@@ -2542,6 +2636,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function init() {
     setupIOSFullScreen();
+    setupAppScreenRecoveryObserver();
     
     document.querySelectorAll('.dock-item').forEach(item => {
         item.addEventListener('click', () => {
@@ -2656,5 +2751,7 @@ async function init() {
             });
         }
     });
+
+    scheduleHomeInteractionRecovery('init-complete');
 }
 
