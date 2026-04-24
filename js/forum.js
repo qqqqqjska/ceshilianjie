@@ -126,9 +126,50 @@
         })()
     };
 
+    function cleanupForumTransientUi() {
+        const removeSelectors = [
+            '#create-menu-overlay',
+            '#profile-action-menu',
+            '#regenerate-options-menu',
+            '#comments-overlay',
+            '#comments-backdrop',
+            '#host-live-summary-overlay',
+            '.modal.forum-wallet-modal'
+        ];
+
+        removeSelectors.forEach((selector) => {
+            document.querySelectorAll(selector).forEach((node) => {
+                try {
+                    if (node && node.parentNode) node.parentNode.removeChild(node);
+                } catch (err) {
+                    // no-op
+                }
+            });
+        });
+
+        if (typeof window.closeForumLiveRoom === 'function') {
+            try { window.closeForumLiveRoom(); } catch (err) { /* no-op */ }
+        }
+    }
+
+    function setupForumVisibilityCleanup(app) {
+        if (!app || app.dataset.forumVisibilityCleanupBound === '1') return;
+        app.dataset.forumVisibilityCleanupBound = '1';
+
+        const observer = new MutationObserver((mutations) => {
+            const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+            if (!classChanged || !app.classList.contains('hidden')) return;
+            cleanupForumTransientUi();
+        });
+        observer.observe(app, { attributes: true, attributeFilter: ['class'] });
+    }
+
     function initForum() {
         const app = document.getElementById('forum-app');
         if (!app) return;
+        if (app.dataset.forumReady === '1') return;
+        app.dataset.forumReady = '1';
+        setupForumVisibilityCleanup(app);
 
         // Sync current user with global state if available
         // if (window.iphoneSimState && window.iphoneSimState.userProfile) {
@@ -2967,6 +3008,7 @@ ${hostModeExtra}
         const closeBtn = document.getElementById('close-forum-app');
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
+                cleanupForumTransientUi();
                 app.classList.add('hidden');
             });
         }
@@ -4161,7 +4203,7 @@ ${hostModeExtra}
     function openForumWalletAmountModal(mode, onConfirm) {
         const isRecharge = mode === 'recharge';
         const modal = document.createElement('div');
-        modal.className = 'modal';
+        modal.className = 'modal forum-wallet-modal';
         modal.style.zIndex = '360';
         modal.style.alignItems = 'center';
         modal.innerHTML = `
@@ -8867,6 +8909,9 @@ ${linkedContactsData.length > 0 ? linkedContactsData.map(c => `- ${c.name} (äººè
                 isHorizontal = true;
                 dragDelta = 0;
                 track.style.transition = 'none';
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+                window.addEventListener('mouseleave', onMouseUp);
                 e.preventDefault();
             });
 
@@ -8877,20 +8922,24 @@ ${linkedContactsData.length > 0 ? linkedContactsData.map(c => `- ${c.name} (äººè
             };
 
             const onMouseUp = () => {
-                if (!isDragging) return;
-                isDragging = false;
-                if (dragDelta < -50 && current < total - 1) {
-                    goTo(current + 1);
-                } else if (dragDelta > 50 && current > 0) {
-                    goTo(current - 1);
-                } else {
-                    goTo(current);
+                if (isDragging) {
+                    isDragging = false;
+                    if (dragDelta < -50 && current < total - 1) {
+                        goTo(current + 1);
+                    } else if (dragDelta > 50 && current > 0) {
+                        goTo(current - 1);
+                    } else {
+                        goTo(current);
+                    }
                 }
                 dragDelta = 0;
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+                window.removeEventListener('mouseleave', onMouseUp);
             };
 
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
+            container.addEventListener('touchcancel', onMouseUp, { passive: true });
+            container.addEventListener('pointercancel', onMouseUp, { passive: true });
         });
     }
 
@@ -9078,6 +9127,7 @@ ${contactPrompt}
     };
 
     window.initForumApp = initForum;
+    window.cleanupForumTransientUi = cleanupForumTransientUi;
     if (window.appInitFunctions) {
         window.appInitFunctions.push(initForum);
     }

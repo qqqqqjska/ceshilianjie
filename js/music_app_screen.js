@@ -6789,6 +6789,37 @@
         return musicV2ScopeCssText(normalized, MUSIC_V2_SCOPE_ROOT);
     }
 
+    function musicV2DispatchReleaseEvents() {
+        try { window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true })); } catch (err) { /* no-op */ }
+        try { window.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true })); } catch (err) { /* no-op */ }
+        try { window.dispatchEvent(new Event('touchcancel', { bubbles: true, cancelable: true })); } catch (err) { /* no-op */ }
+    }
+
+    function musicV2CleanupWhenHidden(appScreen, host) {
+        if (!appScreen || !host) return;
+        if (!appScreen.classList.contains('hidden')) return;
+
+        musicV2DispatchReleaseEvents();
+        try { musicV2HideCurrentPlaylistPanel(); } catch (err) { /* no-op */ }
+        try { musicV2HideBackButtonPanel(); } catch (err) { /* no-op */ }
+        try { musicV2ExitPlaylistSelectionMode(); } catch (err) { /* no-op */ }
+        try { if (typeof window.musicV2CloseInvite === 'function') window.musicV2CloseInvite(); } catch (err) { /* no-op */ }
+
+        host.querySelectorAll('.page-overlay.active').forEach((node) => node.classList.remove('active'));
+    }
+
+    function musicV2SetupVisibilityCleanup(appScreen, host) {
+        if (!appScreen || !host || appScreen.dataset.musicV2VisibilityCleanupBound === '1') return;
+        appScreen.dataset.musicV2VisibilityCleanupBound = '1';
+
+        const observer = new MutationObserver((mutations) => {
+            const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+            if (!classChanged) return;
+            musicV2CleanupWhenHidden(appScreen, host);
+        });
+        observer.observe(appScreen, { attributes: true, attributeFilter: ['class'] });
+    }
+
     function initMusicAppScreen() {
         const appScreen = document.getElementById('music-app');
         const host = document.getElementById('music-app-shadow-host');
@@ -6872,6 +6903,7 @@
         musicV2ApplyBackButtonImage(root);
 
         musicV2InitFeatures(root);
+        musicV2SetupVisibilityCleanup(appScreen, host);
     }
 
     if (window.appInitFunctions) {

@@ -476,6 +476,25 @@ function closeWbModal() {
     wbElements.modalOverlay.classList.remove('active');
 }
 
+function resetWorldbookUiState() {
+    closeWbModal();
+    wbNavHistory = [];
+    wbCurrentCategory = null;
+    wbCurrentEntry = null;
+
+    if (!wbElements.pageCategories || !wbElements.pageEntries || !wbElements.pageDetail) return;
+
+    wbElements.pageCategories.classList.add('active');
+    wbElements.pageEntries.classList.remove('active');
+    wbElements.pageEntries.classList.remove('exit');
+    wbElements.pageDetail.classList.remove('active');
+    wbElements.pageDetail.classList.remove('exit');
+
+    if (wbElements.pageTitle) wbElements.pageTitle.textContent = 'ARCHIVES';
+    updateWbHeaderState();
+    updateWbActionBtn('plus');
+}
+
 // ---------------------------------------------------------
 // Init
 // ---------------------------------------------------------
@@ -484,6 +503,16 @@ function setupWorldbookListeners() {
     if (wbListenersBound) return;
     wbListenersBound = true;
     initWbElements();
+
+    if (wbElements.app && wbElements.app.dataset.wbVisibilityBound !== '1') {
+        wbElements.app.dataset.wbVisibilityBound = '1';
+        const observer = new MutationObserver((mutations) => {
+            const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+            if (!classChanged || !wbElements.app.classList.contains('hidden')) return;
+            resetWorldbookUiState();
+        });
+        observer.observe(wbElements.app, { attributes: true, attributeFilter: ['class'] });
+    }
     
     // Re-bind listeners
     if (wbElements.titleGroup) {

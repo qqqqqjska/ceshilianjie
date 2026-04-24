@@ -1950,13 +1950,56 @@ function dispatchSyntheticPointerRelease() {
     dispatch(document, 'touchcancel', Event);
 }
 
+function cleanupTransientHomeBlockingLayers() {
+    if (isAnyAppScreenVisible()) return;
+
+    if (typeof window.cleanupShoppingTransientUi === 'function') {
+        try { window.cleanupShoppingTransientUi(); } catch (err) { /* no-op */ }
+    }
+    if (typeof window.cleanupForumTransientUi === 'function') {
+        try { window.cleanupForumTransientUi(); } catch (err) { /* no-op */ }
+    }
+
+    const removableSelectors = [
+        '#pdd-cash-modal',
+        '#pdd-bargain-modal',
+        '.pdd-video-ad-overlay',
+        '#shopping-order-progress-modal',
+        '#create-menu-overlay',
+        '#profile-action-menu',
+        '#regenerate-options-menu',
+        '#comments-overlay',
+        '#comments-backdrop',
+        '.modal.forum-wallet-modal'
+    ];
+
+    removableSelectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((node) => {
+            try {
+                if (node && node.parentNode) {
+                    node.parentNode.removeChild(node);
+                }
+            } catch (err) {
+                // no-op
+            }
+        });
+    });
+}
+
 function recoverHomeInteractionState(reason = 'unknown') {
     dispatchSyntheticPointerRelease();
     if (isAnyAppScreenVisible()) return;
+    cleanupTransientHomeBlockingLayers();
 
     if (typeof window.forceResetHomeInteractionState === 'function') {
+        const shouldForceRender = !!document.querySelector('.touch-drag-clone')
+            || Array.from(document.querySelectorAll('.draggable-item, .custom-widget, #music-widget, #polaroid-widget'))
+                .some((el) => {
+                    if (!el || !el.style) return false;
+                    return el.style.visibility === 'hidden' || el.style.opacity === '0';
+                });
         window.forceResetHomeInteractionState({
-            forceRender: true,
+            forceRender: shouldForceRender,
             reason
         });
         return;

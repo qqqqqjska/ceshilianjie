@@ -14,6 +14,8 @@ let currentShoppingProduct = null;
 let currentShoppingCategory = 'All';
 let currentOrderTab = 'all';
 let pendingDeliveryCheckoutShopKey = '';
+let shoppingOrderStatusTimer = null;
+let shoppingVisibilityObserver = null;
 
 function ensureDeliveryDraftByShop() {
     if (!window.iphoneSimState) window.iphoneSimState = {};
@@ -356,14 +358,75 @@ function ensureDeliveryContainer() {
     return true;
 }
 
+function isShoppingAppVisible() {
+    const app = document.getElementById('shopping-app');
+    return !!(app && !app.classList.contains('hidden'));
+}
+
+function cleanupShoppingTransientUi() {
+    const hideByClassSelectors = [
+        '#shopping-options-modal',
+        '#shopping-add-product-modal',
+        '#shopping-spec-modal',
+        '#shopping-payment-choice-modal',
+        '#shopping-delivery-order-modal',
+        '#contact-picker-modal',
+        '#shopping-order-progress-modal'
+    ];
+
+    hideByClassSelectors.forEach((selector) => {
+        const modal = document.querySelector(selector);
+        if (modal && modal.classList) modal.classList.add('hidden');
+    });
+
+    ['#product-detail', '#food-detail'].forEach((selector) => {
+        const panel = document.querySelector(selector);
+        if (panel && panel.classList) panel.classList.remove('active');
+    });
+
+    ['#pdd-cash-modal', '#pdd-bargain-modal', '.pdd-video-ad-overlay'].forEach((selector) => {
+        document.querySelectorAll(selector).forEach((node) => {
+            if (node && node.parentNode) node.parentNode.removeChild(node);
+        });
+    });
+
+    const debugModal = document.getElementById('shopping-debug-modal');
+    if (debugModal) debugModal.style.display = 'none';
+}
+
+function setupShoppingVisibilityCleanup() {
+    if (shoppingVisibilityObserver) return;
+    const app = document.getElementById('shopping-app');
+    if (!app) return;
+
+    shoppingVisibilityObserver = new MutationObserver((mutations) => {
+        const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+        if (!classChanged || !app.classList.contains('hidden')) return;
+        cleanupShoppingTransientUi();
+    });
+    shoppingVisibilityObserver.observe(app, { attributes: true, attributeFilter: ['class'] });
+}
+
 // 初始化监听器
 function setupShoppingListeners() {
-    // 启动订单状态检查定时器
-    setInterval(updateShoppingOrderStatuses, 10000);
+    if (window.__shoppingListenersBound) return;
+    window.__shoppingListenersBound = true;
+
+    setupShoppingVisibilityCleanup();
+
+    // 启动订单状态检查定时器（单例，避免重复初始化导致的定时器堆积）
+    if (!shoppingOrderStatusTimer) {
+        shoppingOrderStatusTimer = setInterval(() => {
+            const appVisible = isShoppingAppVisible();
+            if (!appVisible && document.hidden) return;
+            updateShoppingOrderStatuses({ skipRenderWhenHidden: !appVisible });
+        }, 10000);
+    }
 
     const closeBtn = document.getElementById('close-shopping-app');
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
+            cleanupShoppingTransientUi();
             document.getElementById('shopping-app').classList.add('hidden');
         });
     }
@@ -2506,8 +2569,9 @@ function openProductShareContactPicker(product) {
     modal.classList.remove('hidden');
 }
 
-function updateShoppingOrderStatuses() {
+function updateShoppingOrderStatuses(options = {}) {
     if (!window.iphoneSimState.shoppingOrders) return;
+    const skipRenderWhenHidden = !!options.skipRenderWhenHidden;
 
     let hasChanges = false;
     const now = Date.now();
@@ -2536,9 +2600,11 @@ function updateShoppingOrderStatuses() {
 
     if (hasChanges) {
         saveConfig();
-        const currentTab = document.querySelector('#shopping-app .nav-item.active');
-        if (currentTab && currentTab.dataset.tab === 'orders') {
-            renderShoppingOrders();
+        if (!skipRenderWhenHidden) {
+            const currentTab = document.querySelector('#shopping-app .nav-item.active');
+            if (currentTab && currentTab.dataset.tab === 'orders') {
+                renderShoppingOrders();
+            }
         }
         const chatScreen = document.getElementById('chat-screen');
         if (
@@ -3190,6 +3256,7 @@ function showOrderNotification(title, message) {
 if (window.appInitFunctions) {
     window.appInitFunctions.push(setupShoppingListeners);
 }
+window.cleanupShoppingTransientUi = cleanupShoppingTransientUi;
 
 // ==========================================
 // PDD Activity Logic (Cash & Bargain)
