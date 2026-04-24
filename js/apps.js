@@ -6508,6 +6508,163 @@ function resolveMemoryVectorEmbeddingConfig(vectorSettings) {
     };
 }
 
+function isCrossOriginEndpoint(endpoint) {
+    try {
+        if (!endpoint) return false;
+        const target = new URL(String(endpoint), window.location.href);
+        return target.origin !== window.location.origin;
+    } catch (error) {
+        return false;
+    }
+}
+
+function explainMemoryVectorError(error, resolvedEndpoint = '') {
+    const rawName = String(error && error.name || 'Error');
+    const rawMessage = String(error && error.message || error || '');
+    const normalized = rawMessage.toLowerCase();
+    const detail = {
+        stage: 'unknown',
+        title: '未知错误',
+        summary: '重建向量索引时发生了未分类错误，请复制日志进一步排查。',
+        hint: ''
+    };
+    if (normalized.startsWith('embedding_config_incomplete')) {
+        detail.stage = 'config_validation';
+        detail.title = '配置不完整';
+        const missing = rawMessage.split(':')[1] || '';
+        const missingText = missing ? `缺少字段：${missing}` : '缺少必要字段。';
+        detail.summary = `Embedding 配置校验未通过。${missingText}`;
+        detail.hint = '请补全地址/API Key/模型，或开启“Key 为空时回退聊天 Key”。';
+        return detail;
+    }
+    const httpMatch = normalized.match(/embedding_http_(\d+)/);
+    if (httpMatch) {
+        const status = Number(httpMatch[1] || 0);
+        detail.stage = 'remote_response';
+        detail.title = `服务返回 HTTP ${status}`;
+        if (status === 401 || status === 403) {
+            detail.summary = '鉴权失败，Embedding API Key 无效或无权限。';
+            detail.hint = '请检查 Key 是否可用，或确认服务商是否允许该模型。';
+        } else if (status === 404) {
+            detail.summary = '接口地址不存在。';
+            detail.hint = '请填写基础地址（例如 /v1），系统会自动拼接 /embeddings。';
+        } else {
+            detail.summary = `Embedding 服务返回异常状态码 ${status}。`;
+            detail.hint = '请稍后重试，或联系服务商查看该请求日志。';
+        }
+        return detail;
+    }
+    if (normalized.includes('embedding_timeout')) {
+        detail.stage = 'request_timeout';
+        detail.title = '请求超时';
+        detail.summary = 'Embedding 请求超过超时阈值，被主动中断。';
+        detail.hint = '请检查网络质量，或稍后重试。';
+        return detail;
+    }
+    if (rawName === 'TypeError' && normalized.includes('failed to fetch')) {
+        detail.stage = 'network_or_cors';
+        if (isCrossOriginEndpoint(resolvedEndpoint)) {
+            detail.title = '跨域/CORS 或网络拦截';
+            detail.summary = '浏览器无法完成跨域请求（常见为 CORS 预检失败），因此 fetch 被拦截。';
+            detail.hint = '建议改为后端代理请求 embedding，或在目标服务开启 Access-Control-Allow-Origin。';
+        } else {
+            detail.title = '网络连接失败';
+            detail.summary = '请求未拿到有效响应，可能是网络中断或服务不可达。';
+            detail.hint = '请检查网络与服务地址是否可访问。';
+        }
+        return detail;
+    }
+    detail.summary = `错误类型：${rawName}，错误信息：${rawMessage || '无'}`;
+    detail.hint = '请复制日志给开发者进一步定位。';
+    return detail;
+}
+
+function buildMemoryVectorRebuildLog(payload = {}) {
+    const now = new Date();
+    const vectorSettings = payload.vectorSettings && typeof payload.vectorSettings === 'object'
+        ? payload.vectorSettings
+        : {};
+    const resolvedConfig = payload.resolvedConfig && typeof payload.resolvedConfig === 'object'
+        ? payload.resolvedConfig
+        : {};
+    const result = payload.result && typeof payload.result === 'object' ? payload.result : {};
+    const failure = payload.failure && typeof payload.failure === 'object' ? payload.failure : null;
+    const error = payload.error || null;
+    const lines = [];
+    lines.push('[memory-vector-rebuild-log]');
+    lines.push(`time: ${now.toISOString()}`);
+    lines.push(`page_origin: ${window.location.origin}`);
+    lines.push(`status: ${payload.status || 'unknown'}`);
+    lines.push(`contact_id: ${String(payload.contactId || '')}`);
+    lines.push(`contact_name: ${String(payload.contactName || '')}`);
+    lines.push(`vector_enabled: ${!!vectorSettings.enabled}`);
+    lines.push(`vector_endpoint: ${String(vectorSettings.endpoint || '')}`);
+    lines.push(`resolved_embedding_endpoint: ${String(resolvedConfig.endpoint || '')}`);
+    lines.push(`vector_model: ${String(vectorSettings.model || '')}`);
+    lines.push(`resolved_embedding_model: ${String(resolvedConfig.model || '')}`);
+    lines.push(`vector_api_key_configured: ${String(vectorSettings.apiKey || '').trim() ? 'yes' : 'no'}`);
+    lines.push(`use_chat_key_fallback: ${vectorSettings.useChatKeyFallback !== false ? 'yes' : 'no'}`);
+    lines.push(`top_k: ${Number(vectorSettings.topK || 0)}`);
+    lines.push(`min_similarity: ${Number(vectorSettings.minSimilarity || 0)}`);
+    lines.push(`query_timeout_ms: ${Number(vectorSettings.queryTimeoutMs || 0)}`);
+    lines.push(`indexed_count: ${Number(result.indexedCount || 0)}`);
+    lines.push(`total_memories: ${Number(result.totalMemories || 0)}`);
+    lines.push(`built_count: ${Number(result.builtCount || 0)}`);
+    lines.push(`pending_count: ${Number(result.pendingCount || 0)}`);
+    if (failure) {
+        lines.push(`failure_stage: ${String(failure.stage || '')}`);
+        lines.push(`failure_title: ${String(failure.title || '')}`);
+        lines.push(`failure_summary: ${String(failure.summary || '')}`);
+        lines.push(`failure_hint: ${String(failure.hint || '')}`);
+    }
+    if (error) {
+        lines.push(`error_name: ${String(error.name || '')}`);
+        lines.push(`error_message: ${String(error.message || error || '')}`);
+        if (error && error.stack) {
+            lines.push('error_stack:');
+            lines.push(String(error.stack));
+        }
+    }
+    return lines.join('\n');
+}
+
+function openMemoryVectorErrorModal(summary, logText) {
+    const modal = document.getElementById('memory-vector-error-modal');
+    const summaryEl = document.getElementById('memory-vector-error-summary');
+    const logEl = document.getElementById('memory-vector-error-log');
+    if (!modal || !summaryEl || !logEl) return;
+    summaryEl.textContent = String(summary || '');
+    logEl.value = String(logText || '');
+    modal.classList.remove('hidden');
+    try { logEl.scrollTop = 0; } catch (error) {}
+}
+
+async function copyTextToClipboard(text) {
+    const value = String(text || '');
+    if (!value) return false;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(value);
+            return true;
+        } catch (error) {}
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (error) {
+        copied = false;
+    }
+    document.body.removeChild(textarea);
+    return copied;
+}
+
 async function requestEmbeddingsForTexts(texts, vectorSettings, timeoutMs = 1200) {
     const source = Array.isArray(texts) ? texts.map(item => normalizeMemoryVectorText(item, 8000)).filter(Boolean) : [];
     if (!source.length) {
@@ -10438,6 +10595,10 @@ function setupAppsListeners() {
     const closeMemorySettingsBtn = document.getElementById('close-memory-settings');
     const saveMemorySettingsBtn = document.getElementById('save-memory-settings-btn');
     const memoryVectorRebuildBtn = document.getElementById('memory-vector-rebuild-btn');
+    const memoryVectorErrorModal = document.getElementById('memory-vector-error-modal');
+    const closeMemoryVectorErrorBtn = document.getElementById('close-memory-vector-error');
+    const copyMemoryVectorErrorLogBtn = document.getElementById('copy-memory-vector-error-log-btn');
+    const memoryVectorErrorLogEl = document.getElementById('memory-vector-error-log');
     const editMemoryModal = document.getElementById('edit-memory-modal');
     const closeEditMemoryBtn = document.getElementById('close-edit-memory');
     const saveEditedMemoryBtn = document.getElementById('save-edited-memory-btn');
@@ -10641,6 +10802,27 @@ function setupAppsListeners() {
     if (memorySettingsBtn) memorySettingsBtn.addEventListener('click', openMemorySettings);
     if (closeMemorySettingsBtn) closeMemorySettingsBtn.addEventListener('click', () => memorySettingsModal.classList.add('hidden'));
     if (saveMemorySettingsBtn) saveMemorySettingsBtn.addEventListener('click', handleSaveMemorySettings);
+    if (closeMemoryVectorErrorBtn && memoryVectorErrorModal) {
+        closeMemoryVectorErrorBtn.addEventListener('click', () => memoryVectorErrorModal.classList.add('hidden'));
+    }
+    if (memoryVectorErrorModal) {
+        memoryVectorErrorModal.addEventListener('click', (event) => {
+            if (event.target === memoryVectorErrorModal) {
+                memoryVectorErrorModal.classList.add('hidden');
+            }
+        });
+    }
+    if (copyMemoryVectorErrorLogBtn) {
+        copyMemoryVectorErrorLogBtn.addEventListener('click', async () => {
+            const text = memoryVectorErrorLogEl ? String(memoryVectorErrorLogEl.value || '') : '';
+            const copied = await copyTextToClipboard(text);
+            if (copied) {
+                showNotification('诊断日志已复制', 1500, 'success');
+            } else {
+                showNotification('复制失败，请手动全选复制', 1800);
+            }
+        });
+    }
     if (memoryVectorRebuildBtn) {
         memoryVectorRebuildBtn.addEventListener('click', async () => {
             const contactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
@@ -10648,22 +10830,26 @@ function setupAppsListeners() {
                 showNotification('请先打开一个聊天', 1500);
                 return;
             }
+            const contact = Array.isArray(window.iphoneSimState && window.iphoneSimState.contacts)
+                ? window.iphoneSimState.contacts.find(item => String(item && item.id) === String(contactId))
+                : null;
             const originalText = memoryVectorRebuildBtn.textContent;
             memoryVectorRebuildBtn.disabled = true;
             memoryVectorRebuildBtn.textContent = '重建中...';
             try {
                 if (typeof window.rebuildMemoryVectorIndex === 'function') {
                     const result = await window.rebuildMemoryVectorIndex(contactId);
-                    console.info('[memory-vector] rebuild result', {
-                        contactId: String(contactId || ''),
-                        builtCount: Number(result && result.builtCount || 0),
-                        indexedCount: Number(result && result.indexedCount || 0),
-                        totalMemories: Number(result && result.totalMemories || 0),
-                        pendingCount: Number(result && result.pendingCount || 0)
-                    });
                     const built = Number(result && result.builtCount || 0);
                     const indexed = Number(result && result.indexedCount || 0);
                     const total = Number(result && result.totalMemories || 0);
+                    window.__memoryVectorLastRebuildLog = buildMemoryVectorRebuildLog({
+                        status: 'success',
+                        contactId: String(contactId || ''),
+                        contactName: contact ? (contact.remark || contact.nickname || contact.name || '') : '',
+                        vectorSettings: getMemoryVectorSettings(),
+                        resolvedConfig: resolveMemoryVectorEmbeddingConfig(getMemoryVectorSettings()),
+                        result
+                    });
                     if (total <= 0) {
                         showNotification('当前联系人没有可向量化的记忆条目', 2400);
                     } else {
@@ -10673,7 +10859,27 @@ function setupAppsListeners() {
                     showNotification('向量索引功能尚未就绪', 1800);
                 }
             } catch (error) {
-                console.error('[memory-vector] rebuild failed', error);
+                const vectorSettings = getMemoryVectorSettings();
+                const resolvedConfig = resolveMemoryVectorEmbeddingConfig(vectorSettings);
+                const failure = explainMemoryVectorError(error, resolvedConfig.endpoint);
+                const summaryText = [
+                    `失败阶段：${failure.stage}`,
+                    `错误类型：${failure.title}`,
+                    `具体原因：${failure.summary}`,
+                    failure.hint ? `处理建议：${failure.hint}` : ''
+                ].filter(Boolean).join('\n');
+                const logText = buildMemoryVectorRebuildLog({
+                    status: 'failed',
+                    contactId: String(contactId || ''),
+                    contactName: contact ? (contact.remark || contact.nickname || contact.name || '') : '',
+                    vectorSettings,
+                    resolvedConfig,
+                    result: {},
+                    failure,
+                    error
+                });
+                window.__memoryVectorLastRebuildLog = logText;
+                openMemoryVectorErrorModal(summaryText, logText);
                 const message = String(error && error.message || '');
                 if (message.startsWith('embedding_config_incomplete')) {
                     showNotification('配置不完整：请填写 Embedding 地址，或先配置聊天 API 的 URL/Key', 2600);

@@ -4934,6 +4934,21 @@
                 </div>
             </div>
 
+            <div id="memory-vector-error-modal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>向量重建失败诊断</h3>
+                        <button class="close-btn" id="close-memory-vector-error">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="memory-vector-error-summary" class="memory-setting-hint" style="white-space: pre-wrap;"></div>
+                        <textarea id="memory-vector-error-log" readonly style="width: 100%; height: 220px; margin-top: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;"></textarea>
+                        <div class="memory-setting-hint" style="margin-top: 8px;">可直接复制日志发给开发者排查（不依赖控制台）。</div>
+                        <button id="copy-memory-vector-error-log-btn" class="ios-btn-block" type="button">复制诊断日志</button>
+                    </div>
+                </div>
+            </div>
+
             <div id="memory-refine-confirm-modal" class="modal hidden">
                 <div class="modal-content">
                     <div class="modal-header">
