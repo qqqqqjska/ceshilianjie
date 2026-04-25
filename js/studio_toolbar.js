@@ -2958,6 +2958,50 @@
 
 
 
+                function forceStopDrag() {
+
+                    if (!isDragging) return;
+
+                    isDragging = false;
+
+                    isClick = false;
+
+                    toolbar.style.transition = 'height var(--transition-bounce), width var(--transition-smooth), border-radius var(--transition-smooth), box-shadow var(--transition-smooth)';
+
+                }
+
+                window.addEventListener('blur', forceStopDrag);
+
+                window.addEventListener('pagehide', forceStopDrag);
+
+                document.addEventListener('visibilitychange', () => {
+
+                    if (document.hidden) forceStopDrag();
+
+                });
+
+                const studioAppForDragGuard = document.getElementById('studio-app');
+
+                if (studioAppForDragGuard) {
+
+                    const hostVisibilityObserver = new MutationObserver((mutations) => {
+
+                        const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
+
+                        if (!classChanged) return;
+
+                        if (studioAppForDragGuard.classList.contains('hidden')) {
+
+                            forceStopDrag();
+
+                        }
+
+                    });
+
+                    hostVisibilityObserver.observe(studioAppForDragGuard, { attributes: true, attributeFilter: ['class'] });
+
+                }
+
                 // 防止容器内的原生点击事件与 drag 逻辑冲突
 
 
@@ -3594,27 +3638,57 @@
 
 
 
-    if (document.readyState === 'loading') {
+    function bootstrapStudioToolbarIfVisible() {
 
+    const studioApp = document.getElementById('studio-app');
 
+    if (!studioApp || studioApp.classList.contains('hidden')) return;
 
-        document.addEventListener('DOMContentLoaded', mountStudioToolbar);
+    mountStudioToolbar();
 
+}
 
+function setupStudioToolbarLazyBootstrap() {
 
-    } else {
+    if (window.__studioToolbarLazyBootstrapReady) return;
 
+    window.__studioToolbarLazyBootstrapReady = true;
 
+    const studioApp = document.getElementById('studio-app');
 
-        mountStudioToolbar();
+    if (!studioApp) {
 
-
+        return;
 
     }
 
+    const observer = new MutationObserver((mutations) => {
 
+        const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
 
+        if (!classChanged) return;
+
+        bootstrapStudioToolbarIfVisible();
+
+    });
+
+    observer.observe(studioApp, { attributes: true, attributeFilter: ['class'] });
+
+    bootstrapStudioToolbarIfVisible();
+
+}
+
+if (document.readyState === 'loading') {
+
+    document.addEventListener('DOMContentLoaded', setupStudioToolbarLazyBootstrap);
+
+} else {
+
+    setupStudioToolbarLazyBootstrap();
+
+}
 })();
+
 
 
 

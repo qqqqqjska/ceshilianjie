@@ -4536,31 +4536,65 @@
 
 
 
-    if (document.readyState === 'loading') {
+    function bootstrapStudioPreviewIfVisible() {
 
+    const studioApp = document.getElementById('studio-app');
 
+    if (!studioApp) return;
 
-        document.addEventListener('DOMContentLoaded', function () { waitForShadow(); waitForWechatHooks(); });
+    if (studioApp.classList.contains('hidden')) {
+        if (wechatObserver) wechatObserver.disconnect();
+        return;
+    }
 
+    waitForShadow();
 
+    waitForWechatHooks();
 
-    } else {
+}
 
+function setupStudioPreviewLazyBootstrap() {
 
+    if (window.__studioPreviewLazyBootstrapReady) return;
 
-        waitForShadow();
+    window.__studioPreviewLazyBootstrapReady = true;
 
+    const studioApp = document.getElementById('studio-app');
 
+    if (!studioApp) {
 
-        waitForWechatHooks();
-
-
+        return;
 
     }
 
+    const observer = new MutationObserver(function (mutations) {
 
+        const classChanged = mutations.some(function (item) { return item.type === 'attributes' && item.attributeName === 'class'; });
+
+        if (!classChanged) return;
+
+        bootstrapStudioPreviewIfVisible();
+
+    });
+
+    observer.observe(studioApp, { attributes: true, attributeFilter: ['class'] });
+
+    bootstrapStudioPreviewIfVisible();
+
+}
+
+if (document.readyState === 'loading') {
+
+    document.addEventListener('DOMContentLoaded', setupStudioPreviewLazyBootstrap);
+
+} else {
+
+    setupStudioPreviewLazyBootstrap();
+
+}
 
 })();
+
 
 
 

@@ -1984,6 +1984,7 @@ function cleanupTransientHomeBlockingLayers() {
             }
         });
     });
+
 }
 
 function recoverHomeInteractionState(reason = 'unknown') {
@@ -2060,6 +2061,34 @@ function setupAppScreenRecoveryObserver() {
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) scheduleHomeInteractionRecovery('visibilitychange');
     });
+}
+
+function setupHomeInteractionWatchdog() {
+    if (window.__homeInteractionWatchdogReady) return;
+    window.__homeInteractionWatchdogReady = true;
+
+    let lastRunAt = 0;
+    const maybeUnlock = (event) => {
+        if (isAnyAppScreenVisible()) return;
+        const now = Date.now();
+        if (now - lastRunAt < 280) return;
+        const mainContent = document.getElementById('main-content');
+        if (event && mainContent && event.target instanceof Node && mainContent.contains(event.target)) {
+            return;
+        }
+        lastRunAt = now;
+        cleanupTransientHomeBlockingLayers();
+        if (typeof window.forceResetHomeInteractionState === 'function') {
+            window.forceResetHomeInteractionState({
+                forceRender: false,
+                reason: 'home-watchdog'
+            });
+        }
+    };
+
+    document.addEventListener('pointerdown', maybeUnlock, true);
+    document.addEventListener('touchstart', maybeUnlock, { capture: true, passive: true });
+    window.addEventListener('focus', () => maybeUnlock(null));
 }
 
 function showChatToast(message, duration = 2000) {
@@ -2680,7 +2709,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function init() {
     setupIOSFullScreen();
-    setupAppScreenRecoveryObserver();
     
     document.querySelectorAll('.dock-item').forEach(item => {
         item.addEventListener('click', () => {
@@ -2796,6 +2824,5 @@ async function init() {
         }
     });
 
-    scheduleHomeInteractionRecovery('init-complete');
 }
 
