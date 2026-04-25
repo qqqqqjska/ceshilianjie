@@ -1985,12 +1985,42 @@ function cleanupTransientHomeBlockingLayers() {
         });
     });
 
+    try {
+        const musicSettingsModal = document.getElementById('music-settings-modal');
+        if (musicSettingsModal && musicSettingsModal.classList) {
+            musicSettingsModal.classList.add('hidden');
+        }
+        const shoppingDebugModal = document.getElementById('shopping-debug-modal');
+        if (shoppingDebugModal) {
+            shoppingDebugModal.classList.add('hidden');
+            shoppingDebugModal.style.display = 'none';
+        }
+    } catch (err) {
+        // no-op
+    }
+
 }
 
 function recoverHomeInteractionState(reason = 'unknown') {
     if (isAnyAppScreenVisible()) return;
     dispatchSyntheticPointerRelease();
     cleanupTransientHomeBlockingLayers();
+
+    try {
+        if (document.body && document.body.style && document.body.style.overflow === 'hidden') {
+            document.body.style.overflow = '';
+        }
+        if (document.documentElement && document.documentElement.style && document.documentElement.style.overflow === 'hidden') {
+            document.documentElement.style.overflow = '';
+        }
+        const mainContent = document.getElementById('main-content');
+        if (mainContent && mainContent.style) {
+            if (mainContent.style.filter === 'blur(10px)') mainContent.style.filter = '';
+            if (mainContent.style.pointerEvents === 'none') mainContent.style.pointerEvents = '';
+        }
+    } catch (err) {
+        // no-op
+    }
 
     if (typeof window.forceResetHomeInteractionState === 'function') {
         const shouldForceRender = !!document.querySelector('.touch-drag-clone')
@@ -2022,11 +2052,15 @@ function scheduleHomeInteractionRecovery(reason = 'unknown') {
 function observeAppScreenVisibility(screen) {
     if (!screen || screen.dataset.appScreenRecoveryObserved === '1') return;
     screen.dataset.appScreenRecoveryObserved = '1';
+    let wasHidden = screen.classList.contains('hidden');
 
     const observer = new MutationObserver((mutations) => {
         const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
         if (!classChanged) return;
-        if (!screen.classList.contains('hidden')) return;
+        const isHidden = screen.classList.contains('hidden');
+        if (isHidden === wasHidden) return;
+        wasHidden = isHidden;
+        if (!isHidden) return;
         scheduleHomeInteractionRecovery(`app-screen:${screen.id || 'unknown'}`);
     });
 
@@ -2811,6 +2845,7 @@ async function init() {
     if (window.applyChatMultiSelectClass) applyChatMultiSelectClass();
     
     if (window.initGrid) window.initGrid();
+    setupAppScreenRecoveryObserver();
     
     const refreshButtons = ['close-theme-app', 'close-theme-icons', 'close-theme-wallpaper', 'reset-icons'];
     refreshButtons.forEach(btnId => {
