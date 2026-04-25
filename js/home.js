@@ -551,11 +551,26 @@ function renderItems() {
             el.ondragstart = (e) => handleDragStart(e, item);
             el.ondragend = (e) => handleDragEnd(e, item);
             
-            // 添加触摸事件支持
+            // 添加触摸事件支持（避免 renderItems 多次调用导致监听器重复累积）
+            if (el.__homeTouchStartHandler) {
+                el.removeEventListener('touchstart', el.__homeTouchStartHandler);
+                el.__homeTouchStartHandler = null;
+            }
+            if (el.__homeTouchMoveHandler) {
+                el.removeEventListener('touchmove', el.__homeTouchMoveHandler);
+                el.__homeTouchMoveHandler = null;
+            }
+            if (el.__homeTouchEndHandler) {
+                el.removeEventListener('touchend', el.__homeTouchEndHandler);
+                el.__homeTouchEndHandler = null;
+            }
             if (canDrag) {
-                el.addEventListener('touchstart', (e) => handleItemTouchStart(e, item), { passive: false });
-                el.addEventListener('touchmove', handleItemTouchMove, { passive: false });
-                el.addEventListener('touchend', (e) => handleItemTouchEnd(e, item), { passive: false });
+                el.__homeTouchStartHandler = (e) => handleItemTouchStart(e, item);
+                el.__homeTouchMoveHandler = handleItemTouchMove;
+                el.__homeTouchEndHandler = (e) => handleItemTouchEnd(e, item);
+                el.addEventListener('touchstart', el.__homeTouchStartHandler, { passive: false });
+                el.addEventListener('touchmove', el.__homeTouchMoveHandler, { passive: false });
+                el.addEventListener('touchend', el.__homeTouchEndHandler, { passive: false });
             }
 
             // Fix: 更新 pointer-events，确保退出编辑模式后组件可交互

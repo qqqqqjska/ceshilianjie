@@ -1987,8 +1987,8 @@ function cleanupTransientHomeBlockingLayers() {
 }
 
 function recoverHomeInteractionState(reason = 'unknown') {
-    dispatchSyntheticPointerRelease();
     if (isAnyAppScreenVisible()) return;
+    dispatchSyntheticPointerRelease();
     cleanupTransientHomeBlockingLayers();
 
     if (typeof window.forceResetHomeInteractionState === 'function') {
@@ -2025,6 +2025,7 @@ function observeAppScreenVisibility(screen) {
     const observer = new MutationObserver((mutations) => {
         const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
         if (!classChanged) return;
+        if (!screen.classList.contains('hidden')) return;
         scheduleHomeInteractionRecovery(`app-screen:${screen.id || 'unknown'}`);
     });
 
