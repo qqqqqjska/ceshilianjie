@@ -2590,27 +2590,51 @@
 
 
 
-                document.addEventListener('mousemove', drag);
-
-
-
-                document.addEventListener('mouseup', dragEnd);
-
-
-
-        
-
-
-
                 toolbar.addEventListener('touchstart', dragStart, {passive: false});
 
 
 
-                document.addEventListener('touchmove', drag, {passive: false});
+                let dragRuntimeListenersBound = false;
 
 
 
-                document.addEventListener('touchend', dragEnd);
+                function bindDragRuntimeListeners() {
+
+                    if (dragRuntimeListenersBound) return;
+
+                    dragRuntimeListenersBound = true;
+
+                    document.addEventListener('mousemove', drag);
+
+                    document.addEventListener('mouseup', dragEnd);
+
+                    document.addEventListener('touchmove', drag, {passive: false});
+
+                    document.addEventListener('touchend', dragEnd);
+
+                    document.addEventListener('touchcancel', dragEnd);
+
+                }
+
+
+
+                function unbindDragRuntimeListeners() {
+
+                    if (!dragRuntimeListenersBound) return;
+
+                    dragRuntimeListenersBound = false;
+
+                    document.removeEventListener('mousemove', drag);
+
+                    document.removeEventListener('mouseup', dragEnd);
+
+                    document.removeEventListener('touchmove', drag);
+
+                    document.removeEventListener('touchend', dragEnd);
+
+                    document.removeEventListener('touchcancel', dragEnd);
+
+                }
 
 
 
@@ -2707,6 +2731,10 @@
 
 
                     clickEventPath = typeof e.composedPath === 'function' ? e.composedPath() : (e.target ? [e.target] : []);
+
+
+
+                    bindDragRuntimeListeners();
 
 
 
@@ -2852,103 +2880,45 @@
 
                 function dragEnd(e) {
 
-
-
                     if (!isDragging) return;
-
-
 
                     isDragging = false;
 
-
-
-                    
-
-
+                    unbindDragRuntimeListeners();
 
                     toolbar.style.transition = 'height var(--transition-bounce), width var(--transition-smooth), border-radius var(--transition-smooth), box-shadow var(--transition-smooth)';
 
-
-
-        
-
-
-
                     if (!isClick) {
-
-
 
                         return;
 
-
-
                     }
-
-
-
-        
-
-
 
                     const clickTarget = clickEventPath[0] || e.target;
 
-
-
                     const eventPath = clickEventPath.length ? clickEventPath : (typeof e.composedPath === 'function' ? e.composedPath() : []);
-
-
 
                     const clickedActionButton = eventPath.some((node) => node && node.classList && node.classList.contains('action-btn')) || !!(clickTarget && clickTarget.closest && clickTarget.closest('.action-btn'));
 
-
-
                     const clickedToolbar = eventPath.some((node) => node && node.id === 'toolbar') || !!(clickTarget && clickTarget.closest && clickTarget.closest('#toolbar'));
-
-
-
-        
-
-
 
                     if (clickedActionButton) {
 
-
-
                         return;
 
-
-
                     }
-
-
-
-        
-
-
 
                     if (isCollapsed) {
 
-
-
                         if (clickedToolbar) {
-
-
 
                             togglePanel();
 
-
-
                         }
-
-
 
                         return;
 
-
-
                     }
-
-
 
                 }
 
@@ -2963,6 +2933,8 @@
                     if (!isDragging) return;
 
                     isDragging = false;
+
+                    unbindDragRuntimeListeners();
 
                     isClick = false;
 
@@ -3688,6 +3660,7 @@ if (document.readyState === 'loading') {
 
 }
 })();
+
 
 
 

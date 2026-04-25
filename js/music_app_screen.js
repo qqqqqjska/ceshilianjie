@@ -6811,11 +6811,26 @@
     function musicV2SetupVisibilityCleanup(appScreen, host) {
         if (!appScreen || !host || appScreen.dataset.musicV2VisibilityCleanupBound === '1') return;
         appScreen.dataset.musicV2VisibilityCleanupBound = '1';
+        let cleanupScheduled = false;
+        const scheduleCleanup = () => {
+            if (cleanupScheduled) return;
+            cleanupScheduled = true;
+            const run = () => {
+                cleanupScheduled = false;
+                if (!appScreen.classList.contains('hidden')) return;
+                musicV2CleanupWhenHidden(appScreen, host);
+            };
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(run, { timeout: 1000 });
+            } else {
+                window.setTimeout(run, 80);
+            }
+        };
 
         const observer = new MutationObserver((mutations) => {
             const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
             if (!classChanged) return;
-            musicV2CleanupWhenHidden(appScreen, host);
+            scheduleCleanup();
         });
         observer.observe(appScreen, { attributes: true, attributeFilter: ['class'] });
     }

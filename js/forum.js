@@ -155,11 +155,26 @@
     function setupForumVisibilityCleanup(app) {
         if (!app || app.dataset.forumVisibilityCleanupBound === '1') return;
         app.dataset.forumVisibilityCleanupBound = '1';
+        let cleanupScheduled = false;
+        const scheduleCleanup = () => {
+            if (cleanupScheduled) return;
+            cleanupScheduled = true;
+            const run = () => {
+                cleanupScheduled = false;
+                if (!app.classList.contains('hidden')) return;
+                cleanupForumTransientUi();
+            };
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(run, { timeout: 1200 });
+            } else {
+                window.setTimeout(run, 120);
+            }
+        };
 
         const observer = new MutationObserver((mutations) => {
             const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
             if (!classChanged || !app.classList.contains('hidden')) return;
-            cleanupForumTransientUi();
+            scheduleCleanup();
         });
         observer.observe(app, { attributes: true, attributeFilter: ['class'] });
     }

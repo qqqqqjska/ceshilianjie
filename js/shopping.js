@@ -398,11 +398,26 @@ function setupShoppingVisibilityCleanup() {
     if (shoppingVisibilityObserver) return;
     const app = document.getElementById('shopping-app');
     if (!app) return;
+    let cleanupScheduled = false;
+    const scheduleCleanup = () => {
+        if (cleanupScheduled) return;
+        cleanupScheduled = true;
+        const run = () => {
+            cleanupScheduled = false;
+            if (!app.classList.contains('hidden')) return;
+            cleanupShoppingTransientUi();
+        };
+        if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(run, { timeout: 1200 });
+        } else {
+            window.setTimeout(run, 120);
+        }
+    };
 
     shoppingVisibilityObserver = new MutationObserver((mutations) => {
         const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
         if (!classChanged || !app.classList.contains('hidden')) return;
-        cleanupShoppingTransientUi();
+        scheduleCleanup();
     });
     shoppingVisibilityObserver.observe(app, { attributes: true, attributeFilter: ['class'] });
 }
