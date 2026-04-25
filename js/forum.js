@@ -127,25 +127,34 @@
     };
 
     function cleanupForumTransientUi() {
-        const removeSelectors = [
-            '#create-menu-overlay',
-            '#profile-action-menu',
-            '#regenerate-options-menu',
-            '#comments-overlay',
-            '#comments-backdrop',
-            '#host-live-summary-overlay',
-            '.modal.forum-wallet-modal'
-        ];
-
-        removeSelectors.forEach((selector) => {
-            document.querySelectorAll(selector).forEach((node) => {
-                try {
-                    if (node && node.parentNode) node.parentNode.removeChild(node);
-                } catch (err) {
-                    // no-op
-                }
-            });
+        [
+            'create-menu-overlay',
+            'profile-action-menu',
+            'regenerate-options-menu',
+            'comments-overlay',
+            'comments-backdrop',
+            'host-live-summary-overlay'
+        ].forEach((id) => {
+            const node = document.getElementById(id);
+            if (!node) return;
+            try {
+                if (node.parentNode) node.parentNode.removeChild(node);
+            } catch (err) {
+                // no-op
+            }
         });
+
+        const walletModals = document.getElementsByClassName('forum-wallet-modal');
+        while (walletModals.length > 0) {
+            const node = walletModals[0];
+            if (!node) break;
+            try {
+                if (node.parentNode) node.parentNode.removeChild(node);
+                else break;
+            } catch (err) {
+                break;
+            }
+        }
 
         if (typeof window.closeForumLiveRoom === 'function') {
             try { window.closeForumLiveRoom(); } catch (err) { /* no-op */ }
@@ -164,11 +173,7 @@
                 if (!app.classList.contains('hidden')) return;
                 cleanupForumTransientUi();
             };
-            if (typeof window.requestIdleCallback === 'function') {
-                window.requestIdleCallback(run, { timeout: 1200 });
-            } else {
-                window.setTimeout(run, 120);
-            }
+            window.setTimeout(run, 0);
         };
 
         const observer = new MutationObserver((mutations) => {
@@ -3023,8 +3028,10 @@ ${hostModeExtra}
         const closeBtn = document.getElementById('close-forum-app');
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
-                cleanupForumTransientUi();
                 app.classList.add('hidden');
+                window.setTimeout(() => {
+                    if (app.classList.contains('hidden')) cleanupForumTransientUi();
+                }, 0);
             });
         }
     }

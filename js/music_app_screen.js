@@ -6811,6 +6811,7 @@
     function musicV2SetupVisibilityCleanup(appScreen, host) {
         if (!appScreen || !host || appScreen.dataset.musicV2VisibilityCleanupBound === '1') return;
         appScreen.dataset.musicV2VisibilityCleanupBound = '1';
+        let wasHidden = appScreen.classList.contains('hidden');
         let cleanupScheduled = false;
         const scheduleCleanup = () => {
             if (cleanupScheduled) return;
@@ -6820,16 +6821,15 @@
                 if (!appScreen.classList.contains('hidden')) return;
                 musicV2CleanupWhenHidden(appScreen, host);
             };
-            if (typeof window.requestIdleCallback === 'function') {
-                window.requestIdleCallback(run, { timeout: 1000 });
-            } else {
-                window.setTimeout(run, 80);
-            }
+            window.setTimeout(run, 0);
         };
 
         const observer = new MutationObserver((mutations) => {
             const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
             if (!classChanged) return;
+            const isHidden = appScreen.classList.contains('hidden');
+            if (isHidden === wasHidden) return;
+            wasHidden = isHidden;
             scheduleCleanup();
         });
         observer.observe(appScreen, { attributes: true, attributeFilter: ['class'] });
@@ -6912,6 +6912,7 @@
             profilePic.addEventListener('click', (e) => {
                 e.stopPropagation();
                 appScreen.classList.add('hidden');
+                musicV2CleanupWhenHidden(appScreen, host);
             });
         }
 

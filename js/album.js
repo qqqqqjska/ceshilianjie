@@ -1686,6 +1686,24 @@
         albumState.selectedMoveTargetAlbumIds.clear();
     }
 
+    function resetAlbumStateForHiddenApp() {
+        albumState.activeTab = 'recent';
+        albumState.currentAlbumId = null;
+        albumState.currentPhotoId = null;
+        albumState.currentPhotoCollectionKey = 'recent';
+        albumState.currentPhotoFullView = false;
+        albumState.mainManageMode = null;
+        albumState.detailManageMode = false;
+        albumState.moveModalMode = null;
+        albumState.privacyActionAlbumId = null;
+        albumState.privacyPasswordMode = null;
+        albumState.privacyPasswordAlbumId = null;
+        albumState.selectedRecentPhotoIds.clear();
+        albumState.selectedAlbumIds.clear();
+        albumState.selectedDetailPhotoIds.clear();
+        albumState.selectedMoveTargetAlbumIds.clear();
+    }
+
     function closeAlbumApp() {
         const app = document.getElementById('album-app');
         if (app) app.classList.add('hidden');
@@ -1696,8 +1714,7 @@
         clearAlbumCardLongPress();
         closePhotoDetail();
         closeAlbumDetail();
-        exitMainManageMode();
-        switchAlbumTab('recent');
+        resetAlbumStateForHiddenApp();
     }
 
     function exitMainManageMode() {
@@ -2298,6 +2315,7 @@
 
         if (app.dataset.albumVisibilityBound !== '1') {
             app.dataset.albumVisibilityBound = '1';
+            let wasHidden = app.classList.contains('hidden');
             let cleanupScheduled = false;
             const scheduleCleanup = () => {
                 if (cleanupScheduled) return;
@@ -2312,17 +2330,23 @@
                     clearAlbumCardLongPress();
                     closePhotoDetail();
                     closeAlbumDetail();
+                    resetAlbumStateForHiddenApp();
                 };
-                if (typeof window.requestIdleCallback === 'function') {
-                    window.requestIdleCallback(run, { timeout: 1200 });
-                } else {
-                    window.setTimeout(run, 120);
-                }
+                window.setTimeout(run, 0);
             };
             const observer = new MutationObserver((mutations) => {
                 const classChanged = mutations.some((item) => item.type === 'attributes' && item.attributeName === 'class');
-                if (!classChanged || !app.classList.contains('hidden')) return;
-                scheduleCleanup();
+                if (!classChanged) return;
+                const isHidden = app.classList.contains('hidden');
+                if (isHidden === wasHidden) return;
+                wasHidden = isHidden;
+                if (isHidden) {
+                    scheduleCleanup();
+                    return;
+                }
+                window.setTimeout(() => {
+                    if (!app.classList.contains('hidden')) renderAlbumAppUi();
+                }, 0);
             });
             observer.observe(app, { attributes: true, attributeFilter: ['class'] });
         }

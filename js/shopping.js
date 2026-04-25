@@ -364,34 +364,42 @@ function isShoppingAppVisible() {
 }
 
 function cleanupShoppingTransientUi() {
-    const hideByClassSelectors = [
-        '#shopping-options-modal',
-        '#shopping-add-product-modal',
-        '#shopping-spec-modal',
-        '#shopping-payment-choice-modal',
-        '#shopping-delivery-order-modal',
-        '#contact-picker-modal',
-        '#shopping-order-progress-modal'
-    ];
-
-    hideByClassSelectors.forEach((selector) => {
-        const modal = document.querySelector(selector);
+    [
+        'shopping-options-modal',
+        'shopping-add-product-modal',
+        'shopping-spec-modal',
+        'shopping-payment-choice-modal',
+        'shopping-delivery-order-modal',
+        'contact-picker-modal',
+        'shopping-order-progress-modal'
+    ].forEach((id) => {
+        const modal = document.getElementById(id);
         if (modal && modal.classList) modal.classList.add('hidden');
     });
 
-    ['#product-detail', '#food-detail'].forEach((selector) => {
-        const panel = document.querySelector(selector);
+    ['product-detail', 'food-detail'].forEach((id) => {
+        const panel = document.getElementById(id);
         if (panel && panel.classList) panel.classList.remove('active');
     });
 
-    ['#pdd-cash-modal', '#pdd-bargain-modal', '.pdd-video-ad-overlay'].forEach((selector) => {
-        document.querySelectorAll(selector).forEach((node) => {
-            if (node && node.parentNode) node.parentNode.removeChild(node);
-        });
+    ['pdd-cash-modal', 'pdd-bargain-modal'].forEach((id) => {
+        const node = document.getElementById(id);
+        if (node && node.parentNode) node.parentNode.removeChild(node);
     });
 
+    const adOverlays = document.getElementsByClassName('pdd-video-ad-overlay');
+    while (adOverlays.length > 0) {
+        const node = adOverlays[0];
+        if (!node) break;
+        if (node.parentNode) node.parentNode.removeChild(node);
+        else break;
+    }
+
     const debugModal = document.getElementById('shopping-debug-modal');
-    if (debugModal) debugModal.style.display = 'none';
+    if (debugModal) {
+        debugModal.style.display = 'none';
+        debugModal.classList.add('hidden');
+    }
 }
 
 function setupShoppingVisibilityCleanup() {
@@ -407,11 +415,7 @@ function setupShoppingVisibilityCleanup() {
             if (!app.classList.contains('hidden')) return;
             cleanupShoppingTransientUi();
         };
-        if (typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(run, { timeout: 1200 });
-        } else {
-            window.setTimeout(run, 120);
-        }
+        window.setTimeout(run, 0);
     };
 
     shoppingVisibilityObserver = new MutationObserver((mutations) => {
@@ -441,8 +445,13 @@ function setupShoppingListeners() {
     const closeBtn = document.getElementById('close-shopping-app');
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
-            cleanupShoppingTransientUi();
             document.getElementById('shopping-app').classList.add('hidden');
+            window.setTimeout(() => {
+                const app = document.getElementById('shopping-app');
+                if (app && app.classList.contains('hidden')) {
+                    cleanupShoppingTransientUi();
+                }
+            }, 0);
         });
     }
 
